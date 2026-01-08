@@ -36,6 +36,11 @@ class ProductoSchema(BaseModel):
     codigo_barra: Optional[str] = None
     imagen_url: Optional[str] = None
 
+# esto es para cuando el usuario intenta agregar un item a la tienda
+class InventoryAdd(BaseModel):
+    product_id: str
+    quantity: int
+    sale_price: int
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """
@@ -68,12 +73,12 @@ def get_catalog():
         response = supabase.table("catalogo_universal").select("*").limit(20).execute()
         return response.data
     except Exception as e:
-        print(f"error: {e}" )
+        print(f"error: {e}")
         raise HTTPException(status_code=
                             status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail="Error al conectar con la base de datos")
 
-@app.get("/catalogo/{categoria}",response_model=List[ProductoSchema])
+@app.get("/catalog/{categoria}",response_model=List[ProductoSchema])
 def filtrar_por_categoria(categoria: str):
     try:
         response = supabase.table("catalogo_universal").select("*").eq("categoria", categoria).execute()
@@ -90,4 +95,23 @@ def get_my_profile(user = Depends(get_current_user)):
         "user_id": user.id,
         "email": user.email
     }
+
+@app.post("/inventory", status_code=status.HTTP_201_CREATED)
+def add_to_inventory(item_data: InventoryAdd, user= Depends(get_current_user)):
+    '''
+    Recive: product_id, quantity and sale_price
+    Action: Insert a new row into 'invetario_local' Linked to the user
+    '''
+    try:
+        new_inventory_item = {
+            "user_id": user.id,# From Token
+            "producto_id": item_data.product_id,
+            "stock_actual": item_data.quantity,  
+            "precio_venta": item_data.sale_price
+        }
+        response = supabase.table("inventario_local").insert(new_inventory_item).execute()
+        return {"Message": "Item added to your inventory", "data": response.data}
+    except Exception as e:
+        print(f"error: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 #uvicorn main:app --reload
