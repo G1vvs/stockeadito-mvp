@@ -1,6 +1,6 @@
 # para inicira el venv: .\venv\Scripts\activate
 from fastapi import FastAPI, Depends
-from routers import inventory, sales
+from routers import inventory, sales, chat
 from dependencies import get_current_user
 
 # Inicializar la aplicación FastAPI
@@ -11,6 +11,7 @@ app = FastAPI(
 #Routers
 app.include_router(inventory.router)
 app.include_router(sales.router)
+app.include_router(chat.router)
 # Endpoint raíz de la API
 @app.get("/")
 async def home():
