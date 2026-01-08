@@ -21,7 +21,11 @@ class ProductoSchema(BaseModel):
 
 # esto es para cuando el usuario intenta agregar un item a la tienda
 class InventoryAdd(BaseModel):
-    product_id: str
+    product_id: Optional[str] = None
+    barcode: Optional[str] = None
+    name: Optional[str] = None
+    category: Optional[str] = "General"
+    # obligatorios
     quantity: int
     sale_price: int
 
@@ -46,24 +50,85 @@ def filtrar_por_categoria(categoria: str):
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
-@router.post("/inventory", status_code=status.HTTP_201_CREATED)
-def add_to_inventory(item_data: InventoryAdd, user= Depends(get_current_user)):
-    '''
-    Recive: product_id, quantity and sale_price
-    Action: Insert a new row into 'invetario_local' Linked to the user
-    '''
+@router.post("/inventory", status_code=status.HTTP_200_OK)
+def add_to_inventory(item_data: InventoryAdd, user = Depends(get_current_user)):
+    """
+    Lógica Maestra:
+    1. Si mandas product_id -> Usamos ese.
+    2. Si NO mandas ID, buscamos por CÓDIGO DE BARRA en el Universal.
+    3. Si existe -> Usamos ese ID.
+    4. Si NO existe -> LO CREAMOS en el Universal -> Usamos el ID nuevo.
+    5. Finalmente -> Agregamos a tu inventario local.
+    """
     try:
-        new_inventory_item = {
-            "user_id": user.id,# From Token
-            "producto_id": item_data.product_id,
-            "stock_actual": item_data.quantity,  
-            "precio_venta": item_data.sale_price
-        }
-        response = supabase.table("inventario_local").insert(new_inventory_item).execute()
-        return {"Message": "Item added to your inventory", "data": response.data}
+        target_product_id = item_data.product_id
+
+        # CASO A: No mandaron ID, pero mandaron Código de Barra (Escaneo)
+        if not target_product_id and item_data.barcode:
+            # 1. Buscamos en el Catálogo Universal
+            print(f"Buscando código de barra: {item_data.barcode}")
+            existing_global = supabase.table("catalogo_universal")\
+                .select("id")\
+                .eq("codigo_barra", item_data.barcode)\
+                .execute()
+            
+            if existing_global.data:
+                # ¡Ya existía! Usamos ese.
+                target_product_id = existing_global.data[0]["id"]
+                print(f"Encontrado en catálogo global: {target_product_id}")
+            else:
+                # NO existe. ¡Hay que crearlo para todos! (Crowdsourcing)
+                if not item_data.name:
+                    raise HTTPException(status_code=400, detail="Para crear un producto nuevo, necesito el nombre")
+                
+                print(f"Creando nuevo producto global: {item_data.name}")
+                new_global_product = {
+                    "nombre": item_data.name,
+                    "codigo_barra": item_data.barcode,
+                    "categoria": item_data.category,
+                    "imagen_url": "https://via.placeholder.com/150" # Placeholder por defecto
+                }
+                global_res = supabase.table("catalogo_universal").insert(new_global_product).execute()
+                target_product_id = global_res.data[0]["id"]
+
+        # Si después de todo esto no tenemos ID, error
+        if not target_product_id:
+            raise HTTPException(status_code=400, detail="Debes enviar product_id O (barcode + nombre)")
+
+        # --- AHORA SÍ: Lógica de Inventario Local (Igual que antes) ---
+        
+        # 1. Buscamos si TÚ ya lo tienes
+        existing_local = supabase.table("inventario_local")\
+            .select("*")\
+            .eq("user_id", user.id)\
+            .eq("producto_id", target_product_id)\
+            .execute()
+
+        if existing_local.data:
+            # UPDATE
+            row_id = existing_local.data[0]["id"]
+            current_stock = existing_local.data[0]["stock_actual"]
+            new_stock = current_stock + item_data.quantity
+            
+            response = supabase.table("inventario_local")\
+                .update({"stock_actual": new_stock, "precio_venta": item_data.sale_price})\
+                .eq("id", row_id)\
+                .execute()
+            return {"message": "Stock sumado (Producto existente) ", "nuevo_stock": new_stock}
+        else:
+            # INSERT
+            new_local_item = {
+                "user_id": user.id,
+                "producto_id": target_product_id,
+                "stock_actual": item_data.quantity,
+                "precio_venta": item_data.sale_price
+            }
+            response = supabase.table("inventario_local").insert(new_local_item).execute()
+            return {"message": "Producto agregado a tu tienda ", "data": response.data}
+
     except Exception as e:
-        print(f"error: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/inventory")
 def get_my_inventory(user = Depends(get_current_user)):
