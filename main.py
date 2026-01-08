@@ -114,4 +114,63 @@ def add_to_inventory(item_data: InventoryAdd, user= Depends(get_current_user)):
     except Exception as e:
         print(f"error: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@app.get("/inventory")
+def get_my_inventory(user = Depends(get_current_user)):
+    """
+    Retourn ONLY the items belonging to be logged-in user.
+    we also do a 'join' to fetch the product name
+    """
+    try:
+        response = supabase.table("inventario_local")\
+        .select("*, catalogo_universal(nombre, categoria, imagen_url)")\
+        .eq("user_id", user.id)\
+        .execute()
+        return response.data
+    except Exception as e:
+        print(f"error gettin inventory: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    
+@app.post("/seed", status_code=status.HTTP_201_CREATED)
+def seed_inventory(user = Depends(get_current_user)):
+    """
+    Action: Copies ALL products from 'catalogo_universal' to 'inventario_local'
+    for the current user. 
+    Warning: If run twice, it might duplicate items (unless handled).
+    """
+    try: 
+        existing_stock = supabase.table("inventario_local").select("id").eq("user_id",user.id).limit(1).execute()
+        if len(existing_stock.data) > 0:
+            return {"message": " Inventory already initialized. Skipping seed to avoid duplicates."}
+        catalog_response = supabase.table("catalogo_universal").select("id").execute()
+        global_products = catalog_response.data
+
+        if not global_products:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Global catalog is empty!")
+        
+        inventory_entries = []
+        for product in global_products:
+            entry = {
+                "user_id": user.id,            # The owner (You)
+                "producto_id": product["id"],  # The product
+                "stock_actual": 0,             # Start with 0 stock (User must count later)
+                "stock_minimo": 5,             # Default alert threshold
+                "precio_venta": 0              # Default price (User must set it)
+            }
+            inventory_entries.append(entry)
+
+        # 4. Execute Bulk Insert (One shot)
+        # This is much faster than inserting one by one
+        insert_response = supabase.table("inventario_local").insert(inventory_entries).execute()
+
+        return {
+            "message": f"Success! {len(insert_response.data)} products added to your inventory.",
+            "total_items": len(insert_response.data)
+        }
+
+    except Exception as e:
+        print(f"Seed Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+        
+
 #uvicorn main:app --reload
