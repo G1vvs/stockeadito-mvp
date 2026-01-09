@@ -151,21 +151,6 @@ def buscar_producto_id(nombre_vago: str, user_id: str):
     item = inv.data[0]
     return prod_id, prod_nombre, item["precio_venta"], item["stock_actual"]
 
-    # 3. Búsqueda en Inventario Local
-    print(f"✅ Match elegido: {prod_nombre} (ID: {prod_id})")
-    
-    inv = supabase.table("inventario_local")\
-        .select("stock_actual, precio_venta")\
-        .eq("user_id", user_id)\
-        .eq("producto_id", prod_id)\
-        .execute()
-        
-    if not inv.data:
-        return prod_id, prod_nombre, 0, 0 
-    
-    item = inv.data[0]
-    return prod_id, prod_nombre, item["precio_venta"], item["stock_actual"]
-
 # --- HERRAMIENTAS (TOOLS) ---
 
 def tool_consultar_inventario(producto_nombre: str, user_id: str):
@@ -182,7 +167,7 @@ def tool_consultar_inventario(producto_nombre: str, user_id: str):
     
     return f"📦 {nombre}: Tienes {stock} unidades. Precio venta: ${precio}."
 
-def tool_registrar_venta(producto_nombre: str, cantidad: int, precio_venta_real: int, user_id: str):
+def tool_registrar_venta(producto_nombre: str, cantidad: int, precio_venta_real: int, metodo_pago: str, user_id: str):
     pid, nombre, precio_db, stock = buscar_producto_id(producto_nombre, user_id)
     
     # 1. VERIFICACIÓN DE AMBIGÜEDAD
@@ -200,6 +185,9 @@ def tool_registrar_venta(producto_nombre: str, cantidad: int, precio_venta_real:
     if precio_venta_real == 0 and precio_db == 0:
         return f"🛑 ¡Espera! El producto '{nombre}' no tiene precio registrado y no me dijiste a cuánto lo vendiste. ¿Cuál es el precio para poder registrarlo?"
     
+    # 4. 🛡️ BLOQUEO DE MÉTODO DE PAGO (NUEVO) 💳
+    if metodo_pago == "preguntar":
+        return f"💳 Falta el medio de pago. ¿La venta de {nombre} fue con Efectivo, Tarjeta o Transferencia?"
     # LÓGICA DE PRECIO INTELIGENTE
     precio_final = precio_db
     msg_precio = ""
@@ -272,6 +260,75 @@ def tool_actualizar_stock(producto_nombre: str, cantidad_a_sumar: int, user_id: 
         
     return f"🚛 Carga recibida: Agregadas {cantidad_a_sumar} unidades de {nombre}. Nuevo stock: {nuevo_stock}."
 
+def tool_ver_resumen_ventas(periodo: str, user_id: str):
+    """
+    Muestra el total vendido hoy (o en el periodo solicitado).
+    """
+    # Por simplicidad del MVP, asumiremos "hoy"
+    # Postgres tiene funciones de fecha, pero para no complicarnos con Timezones
+    # vamos a pedir las ventas de las últimas 24 hrs o simplemente traer las últimas 50 y filtrar en python.
+    
+    # Opción PRO: Usar filtro de fecha en Supabase (gte = Greater Than or Equal to Today)
+    from datetime import datetime, timezone
+    
+    # Fecha de hoy en formato YYYY-MM-DD
+    hoy = datetime.now().strftime("%Y-%m-%d")
+    
+    # Traemos ventas creadas hoy
+    response = supabase.table("ventas")\
+        .select("total, detalles, created_at")\
+        .eq("user_id", user_id)\
+        .gte("created_at", f"{hoy}T00:00:00")\
+        .execute()
+        
+    if not response.data:
+        return f"📅 Resumen ({hoy}): No has registrado ventas hoy. ¡Ánimo!"
+    
+    ventas = response.data
+    total_dia = sum([v["total"] for v in ventas])
+    cantidad_ventas = len(ventas)
+    
+    # Resumen de productos vendidos
+    resumen_prods = {}
+    for v in ventas:
+        detalles = v["detalles"] # Es una lista de dicts
+        for d in detalles:
+            prod = d["producto"]
+            cant = d["cantidad"]
+            resumen_prods[prod] = resumen_prods.get(prod, 0) + cant
+            
+    texto_prods = ", ".join([f"{k} ({v})" for k,v in resumen_prods.items()])
+    
+    return f"💰 **CIERRE DE CAJA ({hoy})**:\n- Total Vendido: ${total_dia:,}\n- N° Transacciones: {cantidad_ventas}\n- Lo que más salió: {texto_prods}"
+
+def tool_crear_producto(nombre_nuevo: str, categoria: str, user_id: str):
+    """
+    Crea un producto nuevo en el catálogo global si no existe.
+    """
+    nombre_limpio = nombre_nuevo.strip().title() # Ej: "Doritos Queso L"
+    
+    # 1. Verificamos que no exista (para evitar duplicados por error)
+    existe = supabase.table("catalogo_universal")\
+        .select("id")\
+        .ilike("nombre", nombre_limpio)\
+        .execute()
+        
+    if existe.data:
+        return f"⚠️ El producto '{nombre_limpio}' ya existe en el catálogo. No es necesario crearlo."
+
+    # 2. Insertamos en el Catálogo Universal
+    # Nota: 'sinonimos' queda vacío por defecto
+    nuevo_prod = supabase.table("catalogo_universal").insert({
+        "nombre": nombre_limpio,
+        "categoria": categoria
+    }).execute()
+    
+    if not nuevo_prod.data:
+        return "❌ Error al crear el producto en la base de datos."
+        
+    # 3. Retornamos éxito
+    return f"✅ Producto creado exitosamente: '{nombre_limpio}' (Categoría: {categoria}). Ahora puedes agregar stock o venderlo."
+
 # --- SCHEMA PARA OPENAI ---
 tools_schema = [
     {
@@ -303,19 +360,24 @@ tools_schema = [
             }
         }
     },
-    {
+{
         "type": "function",
         "function": {
             "name": "registrar_venta",
-            "description": "Registra una venta. Si el usuario dice el precio, inclúyelo.",
+            "description": "Registra una venta. Requiere nombre, cantidad, precio y método de pago.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "producto_nombre": {"type": "string"},
                     "cantidad": {"type": "integer"},
-                    "precio_venta_real": {"type": "integer", "description": "El precio al que se vendió. Pon 0 si el usuario no lo dijo."}
+                    "precio_venta_real": {"type": "integer", "description": "Precio unitario real. 0 si no se menciona."},
+                    "metodo_pago": {
+                        "type": "string",
+                        "enum": ["efectivo", "tarjeta", "transferencia", "preguntar"],
+                        "description": "El medio de pago. Si el usuario NO lo menciona, DEBES seleccionar 'preguntar'."
+                    }
                 },
-                "required": ["producto_nombre", "cantidad", "precio_venta_real"]
+                "required": ["producto_nombre", "cantidad", "precio_venta_real", "metodo_pago"]
             }
         }
     },
@@ -345,6 +407,38 @@ tools_schema = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ver_resumen_ventas",
+            "description": "Muestra el total de dinero ganado hoy y qué productos se vendieron.",
+            "parameters": {
+                "type": "object",
+                "properties": {"periodo": {"type": "string", "description": "El periodo a consultar (ej: 'hoy')."}
+                },
+                "required": ["periodo"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "crear_producto",
+            "description": "Crea un producto totalmente nuevo en el catálogo global. Úsalo cuando 'actualizar_stock' falle porque el producto no existe.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_nuevo": {"type": "string", "description": "El nombre oficial del producto (Ej: Doritos Queso L)."},
+                    "categoria": {
+                        "type": "string", 
+                        "description": "La categoría estimada (Ej: Snacks, Bebidas, Abarrotes, Limpieza).",
+                        "enum": ["Abarrotes", "Snacks", "Bebidas", "Lácteos", "Limpieza", "Panadería", "Otros"]
+                    }
+                },
+                "required": ["nombre_nuevo", "categoria"]
+            }
+        }
     }
 ]
 
@@ -353,69 +447,94 @@ class ChatRequest(BaseModel):
     message: str
 
 @router.post("/chat")
-def chat_with_tools(request: ChatRequest, user = Depends(get_current_user)): # <--- AQUÍ DEBERÍAMOS RECIBIR EL USER ID, PERO SIMULAREMOS
-    
+def chat_with_tools(request: ChatRequest, user = Depends(get_current_user)):
     current_user_id = user.id
 
     try:
         system_instruction = load_system_prompt()
+        # Iniciamos la conversación
         messages = [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": request.message}
         ]
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            tools=tools_schema,
-            tool_choice="auto"
-        )
+        print(f"💬 User: {request.message}")
 
-        response_message = response.choices[0].message
-        tool_calls = response_message.tool_calls
+        # --- BUCLE AGENTE (AGENT LOOP) 🔄 ---
+        # Permitimos hasta 5 vueltas de pensamiento para que la IA pueda corregirse
+        # (Ej: Crear producto -> Luego agregar stock -> Luego confirmar)
+        for _ in range(5): 
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                tools=tools_schema,
+                tool_choice="auto"
+            )
 
-        if tool_calls:
-            messages.append(response_message)
-            
+            response_message = response.choices[0].message
+            tool_calls = response_message.tool_calls
+
+            # CASO 1: La IA quiere hablar (no usar herramientas)
+            if not tool_calls:
+                return {"reply": response_message.content}
+
+            # CASO 2: La IA quiere usar herramientas
+            # Agregamos la intención de la IA al historial para mantener el contexto
+            messages.append(response_message) 
+
             for tool_call in tool_calls:
                 fname = tool_call.function.name
                 args = json.loads(tool_call.function.arguments)
-                print(f"🤖 Ejecutando herramienta: {fname} con args: {args}")
+                print(f"🤖 Ejecutando: {fname} | Args: {args}")
                 
                 result_content = "Error desconocido"
                 
+                # --- MAPEO DE TODAS LAS HERRAMIENTAS ---
                 if fname == "consultar_inventario":
                     result_content = tool_consultar_inventario(args["producto_nombre"], current_user_id)
+                    
                 elif fname == "registrar_venta":
-                    result_content = tool_registrar_venta(args["producto_nombre"], 
-                                                        args["cantidad"], 
-                                                        args.get("precio_venta_real", 0), 
-                                                        current_user_id
-                                                    )
+                    result_content = tool_registrar_venta(
+                        args["producto_nombre"], 
+                        args["cantidad"], 
+                        args.get("precio_venta_real", 0),
+                        args.get("metodo_pago", "preguntar"), 
+                        current_user_id
+                    )
+                    
                 elif fname == "actualizar_stock":
                     result_content = tool_actualizar_stock(args["producto_nombre"], args["cantidad_a_sumar"], current_user_id)
+                    
+                elif fname == "actualizar_precio":
+                    result_content = tool_actualizar_precio(args["producto_nombre"], args["nuevo_precio"], current_user_id)
+                    
                 elif fname == "ver_mis_productos":
-                    result_content = tool_ver_mis_productos(current_user_id)    
-                
+                    result_content = tool_ver_mis_productos(current_user_id)
+                    
+                elif fname == "ver_resumen_ventas":
+                    result_content = tool_ver_resumen_ventas(args.get("periodo", "hoy"), current_user_id)
+                    
+                elif fname == "crear_producto":
+                    result_content = tool_crear_producto(args["nombre_nuevo"], args["categoria"], current_user_id)
+
+                # Agregamos el resultado de la herramienta al historial
                 messages.append({
                     "tool_call_id": tool_call.id,
                     "role": "tool",
                     "name": fname,
                     "content": str(result_content),
                 })
+            
+            # --- FIN DEL CICLO FOR ---
+            # El código vuelve arriba, envía 'messages' (con los resultados nuevos) a la IA
+            # y la IA decide qué hacer a continuación.
 
-            final_response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages
-            )
-            return {"reply": final_response.choices[0].message.content}
-        
-        return {"reply": response_message.content}
+        # Si pasaron 5 vueltas y no terminó, cortamos por seguridad
+        return {"reply": "La IA pensó demasiado y se detuvo por seguridad."}
 
     except Exception as e:
         print(f"Error chat: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.post("/chat/test")
 def test_ai_connection(request: ChatRequest):

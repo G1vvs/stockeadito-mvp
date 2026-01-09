@@ -2,6 +2,14 @@
 from fastapi import FastAPI, Depends
 from routers import inventory, sales, chat
 from dependencies import get_current_user
+from fastapi.middleware.cors import CORSMiddleware
+
+origins = [
+    "http://localhost:3000", # Tu futuro frontend React/Next
+    "http://localhost:5173", # Tu futuro frontend Vite
+    "*" # (Peligroso en prod, pero útil para desarrollo ahora)
+]
+
 
 # Inicializar la aplicación FastAPI
 app = FastAPI(
@@ -12,6 +20,14 @@ app = FastAPI(
 app.include_router(inventory.router)
 app.include_router(sales.router)
 app.include_router(chat.router)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # Endpoint raíz de la API
 @app.get("/")
 async def home():
