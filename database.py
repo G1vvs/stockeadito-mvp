@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 
 # Cargar variables de entorno desde el archivo Key.env
-load_dotenv('Key.env') # Carga las variables del archivo .env
+load_dotenv() # Carga las variables del archivo .env
 # Obtener las credenciales de Supabase desde las variables de entorno
 url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_KEY")
