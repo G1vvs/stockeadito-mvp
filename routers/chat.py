@@ -451,14 +451,28 @@ def chat_with_tools(request: ChatRequest, user = Depends(get_current_user)):
     current_user_id = user.id
 
     try:
-        system_instruction = load_system_prompt()
-        # Iniciamos la conversación
+        # 1. Buscar el nombre del negocio (Igual que antes)
+        data_perfil = supabase.table("profiles")\
+            .select("nombre_negocio")\
+            .eq("id", current_user_id)\
+            .execute()
+            
+        nombre_negocio = "Tu Negocio"
+        if data_perfil.data:
+            nombre_negocio = data_perfil.data[0]["nombre_negocio"]
+
+        # 2. Cargar el prompt base desde el archivo
+        raw_prompt = load_system_prompt()
+        
+        # 3. 👇 AQUÍ ESTÁ LA MAGIA: Rellenamos la plantilla
+        # Python busca "{nombre_negocio}" en el texto y lo cambia por "Supermercado Giovanni"
+        system_instruction = raw_prompt.replace("{nombre_negocio}", nombre_negocio)
+
+        # 4. Creamos los mensajes
         messages = [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": request.message}
         ]
-
-        print(f"💬 User: {request.message}")
 
         # --- BUCLE AGENTE (AGENT LOOP) 🔄 ---
         # Permitimos hasta 5 vueltas de pensamiento para que la IA pueda corregirse

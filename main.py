@@ -1,6 +1,6 @@
 # para inicira el venv: .\venv\Scripts\activate
 from fastapi import FastAPI, Depends
-from routers import inventory, sales, chat
+from routers import inventory, sales, chat, auth
 from dependencies import get_current_user
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,10 +16,6 @@ app = FastAPI(
     title="Stockeadito API",
     version="0.4.0",
     description="Backend modular Routers")
-#Routers
-app.include_router(inventory.router)
-app.include_router(sales.router)
-app.include_router(chat.router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,6 +24,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+#Routers
+app.include_router(inventory.router)
+app.include_router(sales.router)
+app.include_router(chat.router)
+app.include_router(auth.router)
 # Endpoint raíz de la API
 @app.get("/")
 async def home():
