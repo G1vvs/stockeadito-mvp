@@ -3,7 +3,7 @@ import os
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from openai import OpenAI
-from dependencies import get_current_user
+from dependencies import get_current_user, confirmar_pago_activo
 from database import supabase
 from datetime import datetime
 #iniciamos el cliente openai
@@ -69,7 +69,8 @@ def tool_ver_mis_productos(user_id: str):
 
 def buscar_producto_id(nombre_vago: str, user_id: str):
     """
-    Búsqueda inteligente V4: Soporte para Sinónimos/Alias (Marraqueta = Batido)
+    Búsqueda inteligente V5: Prioridad por coincidencia de Sinónimos y Nombres.
+    Evita la creación de duplicados cuando hay múltiples resultados parecidos.
     """
     termino = nombre_vago.strip().lower()
     print(f"🔎 Buscando término original: '{termino}'")
@@ -80,44 +81,65 @@ def buscar_producto_id(nombre_vago: str, user_id: str):
         if palabra.endswith("s"): return palabra[:-1]
         return palabra
 
-    # --- 2. SUB-FUNCIÓN: PROCESAR RESULTADOS ---
-    def procesar_resultados(data):
+    # --- 2. SUB-FUNCIÓN: PROCESAR RESULTADOS (MEJORADA) ---
+    def procesar_resultados(data, termino_busqueda):
         if not data: return None
+        
+        # Caso A: Solo hay uno, no hay duda.
+        if len(data) == 1:
+            return data[0]["id"], data[0]["nombre"], 0, 0
+
+        # Caso B: Hay varios. Buscamos si uno coincide "mejor" con el término.
+        # Esto soluciona el problema de "Coca-Cola 3L" vs "Coca-Cola Original 3L"
+        coincidencias_exactas = []
+        for p in data:
+            nombre = p.get('nombre', '').lower()
+            sinonimos = p.get('sinonimos', '')
+            sinonimos = sinonimos.lower() if sinonimos else ""
+            
+            # Si el término exacto está en el nombre o en los sinónimos
+            if termino_busqueda in nombre or termino_busqueda in sinonimos:
+                coincidencias_exactas.append(p)
+
+        # Si después de filtrar solo nos queda uno que encaja perfecto, lo elegimos.
+        if len(coincidencias_exactas) == 1:
+            print(f"🎯 Coincidencia única tras filtrado: {coincidencias_exactas[0]['nombre']}")
+            return coincidencias_exactas[0]["id"], coincidencias_exactas[0]["nombre"], 0, 0
+
+        # Caso C: Sigue habiendo ambigüedad real.
         nombres_encontrados = [p['nombre'] for p in data]
-        print(f"   👀 Coincidencias encontradas: {nombres_encontrados}")
+        print(f" ⚠️ Ambigüedad detectada entre: {nombres_encontrados}")
+        lista_str = ", ".join(nombres_encontrados)
+        return None, f"❌ Encontré varios productos: {lista_str}. ¿Cuál de estos es?", 0, 0
 
-        if len(data) > 1:
-            lista_str = ", ".join(nombres_encontrados)
-            return None, f"❌ Encontré varios productos: {lista_str}. ¿Cuál de estos es?", 0, 0
-        
-        return data[0]["id"], data[0]["nombre"], 0, 0
-
-    # --- LÓGICA DE BÚSQUEDA HÍBRIDA (NOMBRE O SINÓNIMOS) ---
+    # --- 3. SUB-FUNCIÓN: EJECUTAR BÚSQUEDA ---
     def ejecutar_busqueda(termino_busqueda):
-        # Preparamos el término para SQL (ej: %pan batido%)
         t = f"%{termino_busqueda}%"
-        
-        # EL TRUCO ESTÁ AQUÍ 👇
-        # Le decimos: Busca donde nombre sea parecido A t ... O ... sinonimos sea parecido A t
+        # [cite_start]Buscamos en nombre O sinónimos [cite: 16]
         filtro_or = f"nombre.ilike.{t},sinonimos.ilike.{t}"
         
         return supabase.table("catalogo_universal")\
-            .select("id, nombre")\
+            .select("id, nombre, sinonimos")\
             .or_(filtro_or)\
-            .limit(5)\
+            .limit(10)\
             .execute()
 
-    # INTENTO 1: Búsqueda Exacta/Flexible
-    # Quitamos espacios para hacer match parcial (opcional, pero ayuda)
-    termino_limpio = termino.replace(" ", "%")
-    response = ejecutar_busqueda(termino_limpio)
+    # --- FLUJO PRINCIPAL ---
+
+    # INTENTO 1: Búsqueda Flexible (reemplazando espacios por comodines)
+    termino_flexible = termino.replace(" ", "%")
+    response = ejecutar_busqueda(termino_flexible)
     
     if response.data:
-        resultado = procesar_resultados(response.data)
-        if resultado[0] is None: return resultado
-        prod_id, prod_nombre, _, _ = resultado
-    
-    else:
+        resultado = procesar_resultados(response.data, termino)
+        if resultado is not None and (resultado[0] is not None or "Encontré varios" in str(resultado[1])):
+            prod_id, prod_nombre, _, _ = resultado
+            if prod_id is None: return resultado # Es el mensaje de ambigüedad
+        else:
+            # Si procesar_resultados no dio un ID claro, probamos el Plan B
+            response.data = [] 
+
+    if not response.data:
         # INTENTO 2: Plan B (Raíz Singularizada)
         palabras = termino.split(" ")
         primera_palabra = palabras[0]
@@ -127,16 +149,15 @@ def buscar_producto_id(nombre_vago: str, user_id: str):
         
         if len(raiz) >= 3:
             response = ejecutar_busqueda(raiz)
-            
-            resultado_b = procesar_resultados(response.data)
+            resultado_b = procesar_resultados(response.data, termino)
             if not resultado_b: return None, None, 0, 0
-            if resultado_b[0] is None: return resultado_b
+            if resultado_b[0] is None: return resultado_b # Mensaje de ambigüedad
             
             prod_id, prod_nombre, _, _ = resultado_b
         else:
             return None, None, 0, 0
 
-    # 3. Búsqueda en Inventario Local
+    # 4. Búsqueda en Inventario Local del Usuario
     print(f"✅ Match elegido: {prod_nombre} (ID: {prod_id})")
     
     inv = supabase.table("inventario_local")\
@@ -447,7 +468,7 @@ class ChatRequest(BaseModel):
     message: str
 
 @router.post("/chat")
-def chat_with_tools(request: ChatRequest, user = Depends(get_current_user)):
+def chat_with_tools(request: ChatRequest, user = Depends(confirmar_pago_activo)):
     current_user_id = user.id
 
     try:

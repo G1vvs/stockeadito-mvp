@@ -3,7 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 # importamos la conexion
 from database import supabase
-from dependencies import get_current_user
+from dependencies import get_current_user, confirmar_pago_activo
 
 router = APIRouter(
     prefix=("/api"),
@@ -51,7 +51,7 @@ def filtrar_por_categoria(categoria: str):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
 @router.post("/inventory", status_code=status.HTTP_200_OK)
-def add_to_inventory(item_data: InventoryAdd, user = Depends(get_current_user)):
+def add_to_inventory(item_data: InventoryAdd, user = Depends(confirmar_pago_activo)):
     """
     Lógica Maestra:
     1. Si mandas product_id -> Usamos ese.
@@ -131,7 +131,7 @@ def add_to_inventory(item_data: InventoryAdd, user = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/inventory")
-def get_my_inventory(user = Depends(get_current_user)):
+def get_my_inventory(user = Depends(confirmar_pago_activo)):
     """
     Retourn ONLY the items belonging to be logged-in user.
     we also do a 'join' to fetch the product name
@@ -147,7 +147,7 @@ def get_my_inventory(user = Depends(get_current_user)):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
 @router.post("/seed", status_code=status.HTTP_201_CREATED)
-def seed_inventory(user = Depends(get_current_user)):
+def seed_inventory(user = Depends(confirmar_pago_activo)):
     """
     Action: Copies ALL products from 'catalogo_universal' to 'inventario_local'
     for the current user. 

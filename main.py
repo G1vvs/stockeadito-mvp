@@ -1,5 +1,5 @@
 # para inicira el venv: .\venv\Scripts\activate
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from routers import inventory, sales, chat, auth, pagos
 from dependencies import get_current_user
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,4 +44,26 @@ def get_my_profile(user = Depends(get_current_user)):
         "user_id": user.id,
         "email": user.email
     }      
+
+@app.post("/webhook")
+async def recibir_notificacion(request: Request):
+    # 1. Recibimos los datos que envía Mercado Pago
+    datos = await request.json()
+    
+    # 2. Imprimimos para ver qué nos mandaron (esto saldrá en tu consola)
+    print("📩 ¡NOTIFICACIÓN RECIBIDA!", datos)
+    
+    # 3. Aquí iría la lógica: Buscar en base de datos, enviar email, etc.
+    # Por ahora solo veremos el ID del pago.
+    query_params = request.query_params
+    topic = query_params.get("topic") or datos.get("type")
+    id_pago = query_params.get("id") or datos.get("data", {}).get("id")
+
+    if topic == "payment":
+        print(f"💰 Se ha recibido información del pago ID: {id_pago}")
+        # Aquí luego usaremos el SDK para preguntar el estado real (aprobado/rechazado)
+        
+    return {"status": "ok"}
+
+
 #uvicorn main:app --reload

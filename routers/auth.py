@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from database import supabase
+from typing import List, Optional
 
 router = APIRouter(tags=["Auth"])
 
@@ -62,5 +63,12 @@ def login_user(user: UserLogin):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="Error en login")
 
-
+@router.get("/tutoriales", response_model=List[dict])
+def obtener_tutoriales():
+    try:
+        # Traemos los videos ordenados para que el usuario aprenda paso a paso
+        response = supabase.table("tutoriales").select("*").order("orden").execute()
+        return response.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
