@@ -10,6 +10,7 @@ load_dotenv()
 router = APIRouter(tags=["Pagos"])
 
 ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
+ACCESS_WEB = os.getenv("WEBHOOK_URL")
 
 if not ACCESS_TOKEN:
     # Esto es solo para que no falle en tu PC si no has configurado la variable de entorno localmente
@@ -49,7 +50,7 @@ def crear_pago(datos: SolicitudPago, user_autenticado = Depends(get_current_user
             "pending": "https://tu-sitio.com/pending"
         },
         "auto_return": "approved",
-        "notification_url": "https://unstilled-keith-unrarefied.ngrok-free.dev/webhook"
+        "notification_url": "WEBHOOK_URL"
     }
 
     try:

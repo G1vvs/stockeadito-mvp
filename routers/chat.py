@@ -6,33 +6,54 @@ from openai import OpenAI
 from dependencies import get_current_user, confirmar_pago_activo
 from database import supabase
 from datetime import datetime
-#iniciamos el cliente openai
+
+# Iniciamos cliente
 client = OpenAI()
 
 router = APIRouter(
+    prefix="/api",
     tags=["AI Brain"]
 )
-# Cargar el prompt
-def load_system_prompt():
-    """
-    Lee el archivo markdown desde la carpeta 'prompts'
-    """
+
+# --- 1. FUNCIONES DE MEMORIA (NUEVO) ---
+def get_chat_history(user_id: str, limit: int = 6):
+    """Recupera los últimos mensajes para darle contexto a la IA"""
     try:
-        # 1. Obtener la ruta base del proyecto (donde está main.py)
-        # __file__ es este archivo (routers/chat.py).
-        # Vamos dos niveles arriba: routers/.. -> stockeadito-mvp/
+        # Traemos los últimos 6 mensajes (descendiente para obtener los recientes)
+        response = supabase.table("chat_history")\
+            .select("role, content")\
+            .eq("user_id", user_id)\
+            .order("created_at", desc=True)\
+            .limit(limit)\
+            .execute()
+        
+        # Invertimos la lista para que queden en orden cronológico (Viejo -> Nuevo)
+        history = response.data[::-1]
+        return history
+    except Exception as e:
+        print(f"Error recuperando historial: {e}")
+        return []
+
+def save_chat_message(user_id: str, role: str, content: str):
+    """Guarda un mensaje en la base de datos"""
+    try:
+        if content: # Solo guardamos si hay texto
+            supabase.table("chat_history").insert({
+                "user_id": user_id,
+                "role": role,
+                "content": content
+            }).execute()
+    except Exception as e:
+        print(f"Error guardando mensaje: {e}")
+
+# --- 2. SISTEMA Y PROMPT ---
+def load_system_prompt():
+    try:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
-        # 2. Construir la ruta al archivo md
         file_path = os.path.join(base_dir, "prompts", "stockeadito_system.md")
-        
-        # 3. Abrir y leer (encoding utf-8 es CRÍTICO para tildes y emojis)
         with open(file_path, "r", encoding="utf-8") as file:
             return file.read()
-            
     except Exception as e:
-        print(f"Error leyendo el prompt: {e}")
-        # Retornamos un prompt básico de respaldo por si falla el archivo
         return "Eres un asistente útil de ventas."
 
 #busqueda inteligente
@@ -350,6 +371,40 @@ def tool_crear_producto(nombre_nuevo: str, categoria: str, user_id: str):
     # 3. Retornamos éxito
     return f"✅ Producto creado exitosamente: '{nombre_limpio}' (Categoría: {categoria}). Ahora puedes agregar stock o venderlo."
 
+def tool_inicializar_inventario(user_id: str):
+    # ... (Tu función mejorada de la respuesta anterior) ...
+    existing = supabase.table("inventario_local").select("producto_id").eq("user_id", user_id).execute()
+    mis_ids_existentes = {item["producto_id"] for item in existing.data} 
+
+    catalog = supabase.table("catalogo_universal").select("id, nombre").execute()
+    if not catalog.data: return "❌ Error: Catálogo vacío."
+
+    items_a_insertar = []
+    nombres_nuevos = []
+    for prod in catalog.data:
+        if prod["id"] not in mis_ids_existentes:
+            items_a_insertar.append({
+                "user_id": user_id, "producto_id": prod["id"],
+                "stock_actual": 0, "stock_minimo": 5, "precio_venta": 0
+            })
+            nombres_nuevos.append(prod["nombre"])
+
+    if not items_a_insertar: return "✅ Tu inventario ya está completo."
+
+    try:
+        supabase.table("inventario_local").insert(items_a_insertar).execute()
+        ejemplos = ", ".join(nombres_nuevos[:3])
+        return f"✅ Agregué {len(items_a_insertar)} productos nuevos (como {ejemplos})."
+    except Exception as e: return f"❌ Error DB: {str(e)}"
+
+    # 4. Insertamos en Supabase
+    try:
+        resultado = supabase.table("inventario_local").insert(items_a_insertar).execute()
+        cantidad = len(resultado.data) if resultado.data else len(items_a_insertar)
+        return f"✅ ¡Listo! He cargado {cantidad} productos base a tu inventario. Ahora puedes decirme 'Llegaron 10 cocas' para empezar a sumar stock."
+    except Exception as e:
+        return f"❌ Error al guardar en base de datos: {str(e)}"
+
 # --- SCHEMA PARA OPENAI ---
 tools_schema = [
     {
@@ -460,6 +515,18 @@ tools_schema = [
                 "required": ["nombre_nuevo", "categoria"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "inicializar_inventario",
+            "description": "Carga masiva de productos básicos. Úsalo SOLO cuando el usuario diga que no tiene productos, que está vacío o pida 'agregar algunos productos' al inicio.",
+            "parameters": {
+                "type": "object",
+                "properties": {}, 
+                "required": []
+            }
+        }
     }
 ]
 
@@ -472,32 +539,30 @@ def chat_with_tools(request: ChatRequest, user = Depends(confirmar_pago_activo))
     current_user_id = user.id
 
     try:
-        # 1. Buscar el nombre del negocio (Igual que antes)
-        data_perfil = supabase.table("profiles")\
-            .select("nombre_negocio")\
-            .eq("id", current_user_id)\
-            .execute()
-            
-        nombre_negocio = "Tu Negocio"
-        if data_perfil.data:
-            nombre_negocio = data_perfil.data[0]["nombre_negocio"]
+        # 1. Datos del Negocio
+        data_perfil = supabase.table("profiles").select("nombre_negocio").eq("id", current_user_id).execute()
+        nombre_negocio = data_perfil.data[0]["nombre_negocio"] if data_perfil.data else "Tu Negocio"
 
-        # 2. Cargar el prompt base desde el archivo
+        # 2. Prompt del Sistema
         raw_prompt = load_system_prompt()
-        
-        # 3. 👇 AQUÍ ESTÁ LA MAGIA: Rellenamos la plantilla
-        # Python busca "{nombre_negocio}" en el texto y lo cambia por "Supermercado Giovanni"
         system_instruction = raw_prompt.replace("{nombre_negocio}", nombre_negocio)
 
-        # 4. Creamos los mensajes
-        messages = [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": request.message}
-        ]
+        # 3. 🧠 MEMORIA: Recuperamos historial
+        # Ordenamos: System -> Historial Pasado -> Mensaje Actual
+        history_messages = get_chat_history(current_user_id)
+        
+        messages = [{"role": "system", "content": system_instruction}]
+        
+        # Inyectamos el historial recuperado de Supabase
+        for msg in history_messages:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        
+        # Agregamos lo que el usuario acaba de decir
+        messages.append({"role": "user", "content": request.message})
 
-        # --- BUCLE AGENTE (AGENT LOOP) 🔄 ---
-        # Permitimos hasta 5 vueltas de pensamiento para que la IA pueda corregirse
-        # (Ej: Crear producto -> Luego agregar stock -> Luego confirmar)
+        # 4. Bucle del Agente
+        final_reply = ""
+        
         for _ in range(5): 
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -509,12 +574,12 @@ def chat_with_tools(request: ChatRequest, user = Depends(confirmar_pago_activo))
             response_message = response.choices[0].message
             tool_calls = response_message.tool_calls
 
-            # CASO 1: La IA quiere hablar (no usar herramientas)
+            # Si la IA responde texto final (sin llamar herramientas)
             if not tool_calls:
-                return {"reply": response_message.content}
+                final_reply = response_message.content
+                break
 
-            # CASO 2: La IA quiere usar herramientas
-            # Agregamos la intención de la IA al historial para mantener el contexto
+            # Si llama herramientas, guardamos esa intención temporalmente en 'messages'
             messages.append(response_message) 
 
             for tool_call in tool_calls:
@@ -522,50 +587,32 @@ def chat_with_tools(request: ChatRequest, user = Depends(confirmar_pago_activo))
                 args = json.loads(tool_call.function.arguments)
                 print(f"🤖 Ejecutando: {fname} | Args: {args}")
                 
-                result_content = "Error desconocido"
+                result_content = "Error"
                 
-                # --- MAPEO DE TODAS LAS HERRAMIENTAS ---
-                if fname == "consultar_inventario":
-                    result_content = tool_consultar_inventario(args["producto_nombre"], current_user_id)
-                    
-                elif fname == "registrar_venta":
-                    result_content = tool_registrar_venta(
-                        args["producto_nombre"], 
-                        args["cantidad"], 
-                        args.get("precio_venta_real", 0),
-                        args.get("metodo_pago", "preguntar"), 
-                        current_user_id
-                    )
-                    
-                elif fname == "actualizar_stock":
-                    result_content = tool_actualizar_stock(args["producto_nombre"], args["cantidad_a_sumar"], current_user_id)
-                    
-                elif fname == "actualizar_precio":
-                    result_content = tool_actualizar_precio(args["producto_nombre"], args["nuevo_precio"], current_user_id)
-                    
-                elif fname == "ver_mis_productos":
-                    result_content = tool_ver_mis_productos(current_user_id)
-                    
-                elif fname == "ver_resumen_ventas":
-                    result_content = tool_ver_resumen_ventas(args.get("periodo", "hoy"), current_user_id)
-                    
-                elif fname == "crear_producto":
-                    result_content = tool_crear_producto(args["nombre_nuevo"], args["categoria"], current_user_id)
+                # Ejecutamos la función correspondiente
+                if fname == "consultar_inventario": result_content = tool_consultar_inventario(args["producto_nombre"], current_user_id)
+                elif fname == "registrar_venta": result_content = tool_registrar_venta(args["producto_nombre"], args["cantidad"], args.get("precio_venta_real",0), args.get("metodo_pago","preguntar"), current_user_id)
+                elif fname == "actualizar_stock": result_content = tool_actualizar_stock(args["producto_nombre"], args["cantidad_a_sumar"], current_user_id)
+                elif fname == "actualizar_precio": result_content = tool_actualizar_precio(args["producto_nombre"], args["nuevo_precio"], current_user_id)
+                elif fname == "ver_mis_productos": result_content = tool_ver_mis_productos(current_user_id)
+                elif fname == "ver_resumen_ventas": result_content = tool_ver_resumen_ventas(args.get("periodo", "hoy"), current_user_id)
+                elif fname == "crear_producto": result_content = tool_crear_producto(args["nombre_nuevo"], args["categoria"], current_user_id)
+                elif fname == "inicializar_inventario": result_content = tool_inicializar_inventario(current_user_id)
 
-                # Agregamos el resultado de la herramienta al historial
+                # Le devolvemos el resultado a la IA
                 messages.append({
                     "tool_call_id": tool_call.id,
                     "role": "tool",
                     "name": fname,
                     "content": str(result_content),
                 })
-            
-            # --- FIN DEL CICLO FOR ---
-            # El código vuelve arriba, envía 'messages' (con los resultados nuevos) a la IA
-            # y la IA decide qué hacer a continuación.
+        
+        # 5. 💾 GUARDAR EN MEMORIA (Largo Plazo)
+        # Solo guardamos el mensaje del usuario y la respuesta final de la IA
+        save_chat_message(current_user_id, "user", request.message)
+        save_chat_message(current_user_id, "assistant", final_reply)
 
-        # Si pasaron 5 vueltas y no terminó, cortamos por seguridad
-        return {"reply": "La IA pensó demasiado y se detuvo por seguridad."}
+        return {"reply": final_reply}
 
     except Exception as e:
         print(f"Error chat: {e}")
