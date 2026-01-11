@@ -1,4 +1,4 @@
-// assets/js/app.js
+// frontend/assets/js/app.js
 
 const BACKEND_URL = 'http://localhost:8000';
 const token = localStorage.getItem('token');
@@ -6,180 +6,168 @@ const user = JSON.parse(localStorage.getItem('user') || '{}');
 
 // 1. VALIDACIÓN DE SEGURIDAD
 if (!token) {
-    window.location.href = 'index.html';
+    window.location.href = '/'; // Si no hay token, al login
 }
 
-// Inicialización
+// 2. INICIALIZACIÓN
 document.addEventListener('DOMContentLoaded', () => {
-    // Mostrar email en header
     if (user.email) document.getElementById('userEmail').innerText = user.email;
-    
-    // Verificar estado (Free/Premium)
     checkStatus();
-    
-    // Cargar inventario inicial
-    loadInventory();
+    loadInventory(); // Cargar la tabla al iniciar
 
-    // Evento Enter en el chat
-    document.getElementById('chatInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    }
 });
 
 // ==========================================
-// FUNCIONES DE CHAT
-// ==========================================
-
-async function sendMessage() {
-    const input = document.getElementById('chatInput');
-    const message = input.value.trim();
-    // 🔑 IMPORTANTE: El token debe recuperarse justo antes de enviar
-    const token = localStorage.getItem('token'); 
-
-    if (!message) return;
-
-    appendMessage(message, 'user');
-    input.value = '';
-
-    const loadingId = appendMessage('Stockeadito está pensando...', 'bot', true);
-
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/chat`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                // Verifica que diga "Bearer " seguido del token
-                'Authorization': `Bearer ${token}` 
-            },
-            body: JSON.stringify({ message: message })
-        });
-
-        if (response.status === 401 || response.status === 403) {
-            removeMessage(loadingId);
-            appendMessage("❌ Sesión expirada o sin permisos. Por favor, re-ingresa.", 'bot');
-            return;
-        }
-
-        const data = await response.json();
-        removeMessage(loadingId);
-
-        if (response.ok) {
-            appendMessage(data.reply, 'bot');
-            loadInventory(); 
-        } else {
-            appendMessage("❌ Error: " + (data.detail || "Error en el servidor"), 'bot');
-        }
-    } catch (error) {
-        removeMessage(loadingId);
-        appendMessage("❌ Error de conexión con el Backend.", 'bot');
-    }
-}
-
-function appendMessage(text, sender, isTemp = false) {
-    const chatBox = document.getElementById('chatMessages');
-    const div = document.createElement('div');
-    div.classList.add('message', sender);
-    if (isTemp) div.id = 'temp-loading';
-    div.innerText = text;
-    chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll
-    return div.id;
-}
-
-function removeMessage(id) {
-    const el = document.getElementById(id);
-    if (el) el.remove();
-}
-
-// ==========================================
-// FUNCIONES DE INVENTARIO
+// 📦 FUNCIONES DE INVENTARIO (TABLA)
 // ==========================================
 
 async function loadInventory() {
     const token = localStorage.getItem('token');
-    if (!token) {
-        window.location.href = 'index.html';
-        return;
-    }
+    if (!token) return;
+
     try {
         const response = await fetch(`${BACKEND_URL}/api/inventory`, {
-            headers: { 
-                'Authorization': `Bearer ${token}` 
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
         });
-
         if (response.ok) {
             const products = await response.json();
             renderTable(products);
         }
     } catch (error) {
-        console.error("Error cargando inventario", error);
+        console.error("Error inventario:", error);
     }
 }
 
-// Reemplaza esta parte en tu app.js
 function renderTable(products) {
     const tbody = document.getElementById('tableBody');
     tbody.innerHTML = '';
 
     if (!products || products.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center">Inventario vacío</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center">Inventario vacío</td></tr>';
         return;
     }
 
     products.forEach(p => {
-        // Acceder al nombre anidado del catálogo
-        const nombre = p.catalogo_universal ? p.catalogo_universal.nombre : 'Sin nombre';
-        
+        const nombreOriginal = p.catalogo_universal ? p.catalogo_universal.nombre : 'Producto';
+        const nombreSafe = nombreOriginal.replace(/'/g, "\\'"); 
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${nombre}</td>
-            <td style="font-weight:bold;">${p.stock_actual}</td>
-            <td>$${p.precio_venta}</td>
+            <td>${nombreOriginal}</td>
+            <td style="text-align:center; font-weight:bold;">${p.stock_actual}</td>
+            <td style="text-align:right;">$${p.precio_venta.toLocaleString('es-CL')}</td>
+            <td style="text-align:center;">
+                <button class="action-btn btn-edit" 
+                    onclick="editarProducto('${p.id}', '${nombreSafe}', ${p.stock_actual}, ${p.precio_venta})" 
+                    title="Editar">✏️
+                </button>
+                
+                <button class="action-btn btn-delete" 
+                    onclick="eliminarProducto('${p.id}', '${nombreSafe}')" 
+                    title="Eliminar">🗑️
+                </button>
+            </td>
         `;
         tbody.appendChild(tr);
     });
 }
 
-// ==========================================
-// ESTADO Y PAGOS
-// ==========================================
+// 👇 ESTAS SON LAS FUNCIONES QUE TE FALTAN PARA QUE LOS BOTONES FUNCIONEN 👇
 
-function checkStatus() {
-    const container = document.getElementById('statusContainer');
-    // Si ya está aquí, asumimos que es premium por el middleware del backend
-    container.innerHTML = `<span class="status-badge premium">Plan Premium Activo</span>`;
-}
+window.editarProducto = async function(id, nombre, stock, precio) {
+    const nuevoStock = prompt(`Editar Stock para ${nombre}:`, stock);
+    if (nuevoStock === null) return;
+    
+    const nuevoPrecio = prompt(`Editar Precio para ${nombre}:`, precio);
+    if (nuevoPrecio === null) return;
 
-async function comprarPremium() {
-    if(!confirm("¿Quieres ir a Mercado Pago para activar tu cuenta?")) return;
-    const token = localStorage.getItem('token');
     try {
-        const response = await fetch(`${BACKEND_URL}/pagar/crear-link`, {
+        const response = await fetch(`${BACKEND_URL}/api/inventory/${id}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({
+                stock_actual: parseInt(nuevoStock),
+                precio_venta: parseInt(nuevoPrecio)
+            })
+        });
+
+        if (response.ok) {
+            alert("✅ Actualizado");
+            loadInventory();
+        } else {
+            alert("❌ Error al actualizar");
+        }
+    } catch (e) { alert("Error de conexión"); }
+};
+
+window.eliminarProducto = async function(id, nombre) {
+    if(!confirm(`⚠️ ¿Eliminar "${nombre}"?`)) return;
+
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/inventory/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+
+        if (response.ok) {
+            alert("🗑️ Eliminado");
+            loadInventory();
+        } else {
+            alert("❌ Error al eliminar");
+        }
+    } catch (e) { alert("Error de conexión"); }
+};
+
+// ==========================================
+// 💬 FUNCIONES DE CHAT & OTROS
+// ==========================================
+
+async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    appendMessage(msg, 'user');
+    input.value = '';
+    const loadId = appendMessage('...', 'bot', true);
+
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
-            body: JSON.stringify({}) // Cuerpo vacío
+            body: JSON.stringify({ message: msg })
         });
-        
-        const data = await response.json();
-        if (data.url_pago) {
-            window.location.href = data.url_pago;
-        } else {
-            alert("Error generando link de pago");
-        }
-    } catch (error) {
-        alert("Error de conexión");
+        const data = await res.json();
+        removeMessage(loadId);
+        appendMessage(data.reply || "Error", 'bot');
+        if (res.ok) loadInventory();
+    } catch (e) {
+        removeMessage(loadId);
+        appendMessage("Error de conexión", 'bot');
     }
 }
 
-// ==========================================
-// LOGOUT
-// ==========================================
-function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = 'index.html';
+function appendMessage(text, sender, isTemp=false) {
+    const box = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = `message ${sender}`;
+    if(isTemp) div.id = 'temp';
+    div.innerText = text;
+    box.appendChild(div);
+    return div.id;
 }
+function removeMessage(id) { const el = document.getElementById(id); if(el) el.remove(); }
+function checkStatus() { document.getElementById('statusContainer').innerHTML = '<span class="status-badge premium">Premium</span>'; }
+function logout() { localStorage.clear(); window.location.href = '/'; }

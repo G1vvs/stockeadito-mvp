@@ -599,3 +599,156 @@ tr:hover {
         min-height: 400px;
     }
 }
+/* =========================================
+   ESTILOS NUEVOS DEL CHAT (Tipo ChatGPT)
+   ========================================= */
+
+.chat-input-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    background-color: #fff;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* 🎤 Botón Micrófono Redondo */
+.mic-btn {
+    width: 40px;  /* Más pequeño y controlado */
+    height: 40px;
+    border-radius: 50%;
+    background-color: #f3f4f6; /* Gris muy suave */
+    color: #0c4a6e; /* Dark Teal (Icono) */
+    border: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.mic-btn:hover {
+    background-color: #e0f2fe; /* Un cyan muy clarito */
+    color: #00b6d4; /* Cyan */
+    border-color: #00b6d4;
+}
+
+.mic-btn.recording {
+    background-color: #f97316; /* ORANGE (Acción) */
+    color: white;
+    border-color: #f97316;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(255, 77, 77, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 77, 77, 0); }
+}
+
+/* 📦 Contenedor "Cápsula" (Input + Botón Enviar) */
+.input-wrapper {
+    position: relative;
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+}
+
+/* 📝 El campo de texto */
+#chatInput {
+    width: 100%;
+    padding: 10px 45px 10px 15px;
+    border-radius: 20px;
+    border: 1px solid #d1d5db;
+    outline: none;
+    font-size: 0.95rem;
+    background-color: #f9fafb;
+    color: #0c4a6e; /* Texto Dark Teal */
+    transition: all 0.3s;
+}
+
+#chatInput:focus {
+    border-color: #00b6d4; /* CYAN al enfocar */
+    background-color: #fff;
+    box-shadow: 0 0 0 3px rgba(0, 182, 212, 0.1); /* Glow Cyan suave */
+}
+
+/* ➤ Botón de Enviar (Icono dentro del input) */
+.send-btn-icon {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: #f97316; /* ORANGE (CTA) */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.send-btn-icon:hover {
+    background-color: #fff7ed; /* Orange muy suave de fondo */
+}
+
+.send-btn-icon svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+    margin-left: 2px; /* Pequeño ajuste visual para el ícono de avión */
+}
+
+/* =========================================
+    BOTONES DE ACCIÓN EN TABLA
+   ========================================= */
+action-btn {
+    width: 32px;          /* Cuadrados fijos para que no se vean gigantes */
+    height: 32px;
+    padding: 0;           /* Sin padding extra */
+    margin: 0 4px;
+    border: none;
+    border-radius: 8px;   /* Bordes suavemente redondeados */
+    cursor: pointer;
+    font-size: 0.9rem;    /* Emoji más pequeño */
+    display: inline-flex; /* Centra el emoji perfecto */
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s, opacity 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.action-btn:hover {
+    transform: translateY(-2px); /* Pequeña elevación */
+    opacity: 0.9;
+}
+
+/* Botón Editar ✏️ */
+.btn-edit {
+    background-color: #e0f2fe; /* Fondo Cyan muy suave */
+    color: #00b6d4;            /* Icono Cyan fuerte */
+    border: 1px solid #bae6fd;
+}
+.btn-edit:hover {
+    background-color: #00b6d4;
+    color: white;
+}
+
+/* Botón Eliminar 🗑️ */
+.btn-delete {
+    background-color: #ffedd5; /* Fondo Naranjo muy suave */
+    color: #f97316;            /* Icono Naranjo fuerte */
+    border: 1px solid #fed7aa;
+}
+.btn-delete:hover {
+    background-color: #f97316;
+    color: white;
+}
+
+

@@ -6,6 +6,8 @@ from openai import OpenAI
 from dependencies import get_current_user, confirmar_pago_activo
 from database import supabase
 from datetime import datetime
+import shutil 
+from fastapi import UploadFile, File
 
 # Iniciamos cliente
 client = OpenAI()
@@ -618,24 +620,37 @@ def chat_with_tools(request: ChatRequest, user = Depends(confirmar_pago_activo))
         print(f"Error chat: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/chat/test")
-def test_ai_connection(request: ChatRequest):
-    '''
-    Envia un mensaje simple a chatgpt-4o-mini para verificar
-    '''
+@router.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    """
+    Recibe un audio (blob), lo guarda temporalmente, lo envía a Whisper
+    y devuelve el texto transcrito.
+    """
     try:
-        print(f"Enviado a OpenAI: {request.message}")
-        completion = client.chat.completions.create(
-            model = "gpt-4o-mini", # usamos el modelo barato
-            messages=[
-                {"role": "system", "content": "Eres un asistente útil de un minimarket chileno."},
-                {"role": "user", "content": request.message}
-            ]
-        )
-        response_text = completion.choices[0].message.content
-        return {"reply": response_text}
-    
+        # 1. Guardar el archivo temporalmente en el servidor
+        # Whisper necesita leer un archivo real del disco
+        temp_filename = f"temp_{file.filename}.webm"
+        
+        with open(temp_filename, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # 2. Enviarlo a OpenAI Whisper
+        print("🎤 Procesando audio con Whisper...")
+        with open(temp_filename, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1", 
+                file=audio_file,
+                language="es" # Forzamos español para mejorar precisión
+            )
+            
+        # 3. Limpieza: Borrar el archivo temporal
+        os.remove(temp_filename)
+        
+        texto_transcrito = transcript.text
+        print(f"🗣️ Texto detectado: {texto_transcrito}")
+        
+        return {"text": texto_transcrito}
+
     except Exception as e:
-        print(f"Error OpenAI: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=str(e))
+        print(f"Error en transcripción: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

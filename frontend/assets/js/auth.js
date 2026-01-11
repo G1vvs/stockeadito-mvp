@@ -87,7 +87,7 @@ async function handleLogin(e) {
                 localStorage.setItem('user', JSON.stringify(usuarioParaGuardar));
                 
                 // 3. Redirigimos
-                window.location.href = 'dashboard.html';
+                window.location.href = '/dashboard';
             }
         } else {
             alert('Error: ' + (data.message || 'Credenciales incorrectas'));

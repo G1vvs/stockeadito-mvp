@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Body
 from typing import List, Optional
 from pydantic import BaseModel
 # importamos la conexion
@@ -187,4 +187,48 @@ def seed_inventory(user = Depends(confirmar_pago_activo)):
         print(f"Seed Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class InventoryUpdate(BaseModel):
+    stock_actual: int = None
+    precio_venta: int = None
 
+# --- RUTAS EXISTENTES ARRIBA ---
+
+# 👇 NUEVA RUTA: EDITAR (PATCH)
+@router.patch("/inventory/{item_id}")
+def update_inventory_item(item_id: str, update_data: InventoryUpdate, user = Depends(confirmar_pago_activo)):
+    """Permite al usuario editar el stock o precio de SU producto"""
+    # 1. Validar que el item le pertenece al usuario
+    # (El RLS de Supabase ya hace esto, pero es doble seguridad)
+    check = supabase.table("inventario_local").select("id").eq("id", item_id).eq("user_id", user.id).execute()
+    if not check.data:
+        raise HTTPException(status_code=404, detail="Producto no encontrado o no te pertenece.")
+
+    # 2. Preparamos los datos a actualizar (solo los que envió)
+    data_to_update = {}
+    if update_data.stock_actual is not None:
+        data_to_update["stock_actual"] = update_data.stock_actual
+    if update_data.precio_venta is not None:
+        data_to_update["precio_venta"] = update_data.precio_venta
+        
+    if not data_to_update:
+        return {"msg": "Nada que actualizar"}
+
+    try:
+        supabase.table("inventario_local").update(data_to_update).eq("id", item_id).execute()
+        return {"msg": "✅ Producto actualizado"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 👇 NUEVA RUTA: ELIMINAR (DELETE)
+@router.delete("/inventory/{item_id}")
+def delete_inventory_item(item_id: str, user = Depends(confirmar_pago_activo)):
+    """Elimina un producto del inventario local"""
+    try:
+        # El RLS asegura que solo borre los suyos
+        result = supabase.table("inventario_local").delete().eq("id", item_id).eq("user_id", user.id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Producto no encontrado o no te pertenece.")
+        return {"msg": "🗑️ Producto eliminado"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

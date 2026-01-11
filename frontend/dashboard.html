@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Stockeadito</title>
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="icon" href="data:,">
 </head>
 <body>
 
@@ -26,23 +27,36 @@
             <div class="chat-header">
                 🤖 Asistente Stockeadito
             </div>
+            
             <div class="chat-messages" id="chatMessages">
                 <div class="message bot">
                     ¡Hola! Soy Stockeadito, tu asistente de inventario. ¿En qué puedo ayudarte hoy?
                 </div>
             </div>
+            
             <div class="chat-input-area">
-                <input type="text" id="chatInput" placeholder="Escribe aquí (Ej: Vendí 2 cocas)..." autocomplete="off">
-                <button class="btn btn-primary" onclick="sendMessage()">Enviar</button>
+                
+                <button id="micButton" class="mic-btn" onclick="toggleRecording()" title="Hablar">
+                    🎤
+                </button>
+                
+                <div class="input-wrapper">
+                    <input type="text" id="chatInput" placeholder="Escribe o presiona el micro..." autocomplete="off">
+                    
+                    <button class="send-btn-icon" onclick="sendMessage()" title="Enviar">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                        </svg>
+                    </button>
+                </div>
+
             </div>
         </div>
 
         <div class="data-panel">
             <div class="data-header">
                 <h2>📦 Tu Inventario</h2>
-                
-                <div id="statusContainer">
-                    </div>
+                <div id="statusContainer"></div>
             </div>
 
             <div class="table-container">
@@ -50,13 +64,14 @@
                     <thead>
                         <tr>
                             <th>Producto</th>
-                            <th style="width: 100px;">Stock</th>
-                            <th style="width: 120px;">Precio</th>
+                            <th style="width: 80px; text-align: center;">Stock</th>
+                            <th style="width: 100px; text-align: right;">Precio</th>
+                            <th style="width: 100px; text-align: center;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody">
                         <tr>
-                            <td colspan="3" style="text-align: center; color: gray;">Cargando datos...</td>
+                            <td colspan="4" style="text-align: center; color: gray;">Cargando datos...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -65,6 +80,6 @@
 
     </main>
 
-    <script src="assets/js/app.js"></script>
+    <script src="/assets/js/app.js"></script>
 </body>
 </html>
