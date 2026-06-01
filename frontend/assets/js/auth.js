@@ -106,7 +106,7 @@ async function handleSignup(e) {
     const password = document.getElementById('signupPassword').value;
 
     try {
-        const response = await fetch(`${BACKEND_URL}/auth/signup`, {
+        const response = await fetch(`${BACKEND_URL}/auth/register`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

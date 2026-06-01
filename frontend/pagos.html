@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activar Suscripción - Stockeadito</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <style>
+        .payment-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f8f9fa;
+        }
+        .payment-card {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+        .mp-logo {
+            width: 150px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="payment-wrapper">
+        <div class="payment-card">
+            <h2>📦 Stockeadito</h2>
+            <h3 style="margin-top: 10px; color: var(--text-gray);">Activa tu plan Premium</h3>
+            
+            <div style="margin: 30px 0; padding: 20px; background: #f0f7ff; border-radius: 10px;">
+                <p style="font-size: 1.2rem; font-weight: bold; color: var(--primary-color);">Suscripción Mensual</p>
+                <p style="font-size: 2rem; font-weight: bold; margin: 10px 0;">$10.000<span style="font-size: 1rem; color: gray;">/mes</span></p>
+                <p style="font-size: 0.9rem; color: #666;">Acceso total a la IA, inventario y reportes.</p>
+            </div>
+
+            <button id="btnPagar" class="btn btn-primary btn-full btn-large" onclick="procesarPago()">
+                Pagar con MercadoPago
+            </button>
+            
+            <p style="margin-top: 15px; font-size: 0.8rem; color: #888;">
+                Pago 100% seguro y encriptado.
+            </p>
+            
+            <button class="btn btn-secondary btn-full" style="margin-top: 15px;" onclick="cerrarSesion()">
+                Cancelar y salir
+            </button>
+        </div>
+    </div>
+
+    <script src="/assets/js/pagos.js"></script>
+</body>
+</html>

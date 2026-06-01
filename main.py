@@ -23,13 +23,35 @@ app = FastAPI(title="Stockeadito API", version="1.0.0")
 # ==========================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Puedes restringirlo a dominios específicos en producción
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Montamos la carpeta de estilos y scripts
+# ✅ FIX: Rutas de JS y CSS con headers anti-caché
+# Deben ir ANTES del app.mount para que FastAPI las procese primero
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0"
+}
+
+@app.get("/assets/js/{filename}")
+async def serve_js(filename: str):
+    return FileResponse(
+        path=os.path.join(ASSETS_DIR, "js", filename),
+        headers=NO_CACHE_HEADERS
+    )
+
+@app.get("/assets/css/{filename}")
+async def serve_css(filename: str):
+    return FileResponse(
+        path=os.path.join(ASSETS_DIR, "css", filename),
+        headers=NO_CACHE_HEADERS
+    )
+
+# El resto de assets (imágenes, etc.) se sirven normal
 if os.path.exists(ASSETS_DIR):
     app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
@@ -54,6 +76,10 @@ async def root():
 async def dashboard():
     return FileResponse(os.path.join(FRONTEND_DIR, "dashboard.html"))
 
+@app.get("/pagos.html")
+async def pagos_page():
+    return FileResponse(os.path.join(FRONTEND_DIR, "pagos.html"))
+
 # ==========================================
 # 👤 UTILIDADES & WEBHOOKS
 # ==========================================
@@ -61,8 +87,3 @@ async def dashboard():
 @app.get("/me")
 def get_my_profile(user = Depends(get_current_user)):
     return {"user_id": user.id, "email": user.email}
-
-@app.post("/webhook")
-async def recibir_webhook(request: Request):
-    # Aquí procesarás notificaciones de Mercado Pago en el futuro
-    return {"status": "received"}

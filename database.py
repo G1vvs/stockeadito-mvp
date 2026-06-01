@@ -1,15 +1,15 @@
 import os
-from fastapi import APIRouter
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-# Cargar variables de entorno desde el archivo Key.env
-load_dotenv() # Carga las variables del archivo .env
-# Obtener las credenciales de Supabase desde las variables de entorno
-url: str = os.environ.get("SUPABASE_URL")
-key: str = os.environ.get("SUPABASE_KEY")
-# Verificar que las credenciales estén presentes
+# 1. Cargar el archivo .env ANTES de pedir las variables
+load_dotenv(override=True)
+# 2. Extraer las variables
+url: str = os.getenv("SUPABASE_URL")
+key: str = os.getenv("SUPABASE_KEY")
+
+# 3. Inicializar Supabase
 if not url or not key:
-    raise ValueError("Error: Faltan las llaves en el .env")
-# Crear cliente de Supabase con las credenciales
+    raise ValueError("Faltan las variables de entorno de Supabase")
+
 supabase: Client = create_client(url, key)

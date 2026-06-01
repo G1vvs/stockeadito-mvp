@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 from dependencies import get_current_user, confirmar_pago_activo
 from database import supabase
-from datetime import datetime
+from datetime import datetime, date
 import shutil 
 from fastapi import UploadFile, File
 
@@ -214,56 +214,65 @@ def tool_consultar_inventario(producto_nombre: str, user_id: str):
 def tool_registrar_venta(producto_nombre: str, cantidad: int, precio_venta_real: int, metodo_pago: str, user_id: str):
     pid, nombre, precio_db, stock = buscar_producto_id(producto_nombre, user_id)
     
-    # 1. VERIFICACIÓN DE AMBIGÜEDAD
-    if not pid:
-        if nombre and "Encontré varios" in nombre:
-            return nombre 
-        return f"❌ Error: No encuentro el producto '{producto_nombre}'."
-    
-    # 2. VERIFICACIÓN DE STOCK
-    if stock < cantidad:
-        return f"⚠️ Stock insuficiente de {nombre}. Tienes {stock}, intentas vender {cantidad}."
-    
-    # 3. 🛡️ BLOQUEO DE SEGURIDAD DE PRECIO (NUEVO)
-    # Si la IA no detectó precio en el mensaje (0) Y en la base de datos tampoco hay (0)
-    if precio_venta_real == 0 and precio_db == 0:
-        return f"🛑 ¡Espera! El producto '{nombre}' no tiene precio registrado y no me dijiste a cuánto lo vendiste. ¿Cuál es el precio para poder registrarlo?"
-    
-    # 4. 🛡️ BLOQUEO DE MÉTODO DE PAGO (NUEVO) 💳
-    if metodo_pago == "preguntar":
-        return f"💳 Falta el medio de pago. ¿La venta de {nombre} fue con Efectivo, Tarjeta o Transferencia?"
-    # LÓGICA DE PRECIO INTELIGENTE
-    precio_final = precio_db
-    msg_precio = ""
+    print(f"🛒 VENTA | producto='{producto_nombre}' → pid={pid}, nombre={nombre}, precio_db={precio_db}, stock={stock}")
 
-    if precio_venta_real > 0:
-        precio_final = precio_venta_real
-        if precio_db == 0:
-            supabase.table("inventario_local")\
-                .update({"precio_venta": precio_venta_real})\
-                .eq("user_id", user_id)\
-                .eq("producto_id", pid)\
-                .execute()
-            msg_precio = "(He guardado este precio como el oficial para el futuro)."
+    if not pid:
+        if nombre and "Encontré varios" in nombre: return nombre 
+        return f"❌ Error: No encuentro '{producto_nombre}'."
     
-    total = precio_final * cantidad
+    if stock < cantidad:
+        return f"⚠️ Stock insuficiente. Tienes {stock}, necesitas {cantidad}."
+    
+    if precio_venta_real == 0 and precio_db == 0:
+        return "🛑 ERROR: Falta el precio. Pregunta al usuario y vuelve a ejecutar esta función."
+    if metodo_pago == "preguntar":
+        return "🛑 ERROR: Falta el método de pago. Pregunta al usuario (Efectivo/Tarjeta) y vuelve a ejecutar esta función."
+    
+    precio_final = precio_venta_real if precio_venta_real > 0 else precio_db
     nuevo_stock = stock - cantidad
-    
-    supabase.table("inventario_local")\
-        .update({"stock_actual": nuevo_stock})\
-        .eq("user_id", user_id)\
-        .eq("producto_id", pid)\
-        .execute()
-        
-    venta_data = {
-        "user_id": user_id,
-        "total": total,
-        "metodo_pago": "efectivo",
-        "detalles": [{"producto": nombre, "cantidad": cantidad, "precio": precio_final}]
-    }
-    supabase.table("ventas").insert(venta_data).execute()
-    
-    return f"✅ Venta exitosa: {cantidad}x {nombre} a ${precio_final} c/u. Total: ${total}. Te quedan {nuevo_stock}. {msg_precio}"
+
+    # Actualización ATÓMICA con logging completo
+    try:
+        inv_row = supabase.table("inventario_local")\
+            .select("id")\
+            .eq("user_id", user_id)\
+            .eq("producto_id", pid)\
+            .single()\
+            .execute()
+
+        print(f"🔍 Fila inventario encontrada: {inv_row.data}")
+
+        if inv_row.data:
+            row_id = inv_row.data["id"]
+            update_result = supabase.table("inventario_local")\
+                .update({"stock_actual": nuevo_stock})\
+                .eq("id", row_id)\
+                .execute()
+            print(f"✅ Stock actualizado → nuevo_stock={nuevo_stock} | resultado={update_result.data}")
+        else:
+            print(f"❌ NO SE ENCONTRÓ fila para user_id={user_id}, producto_id={pid}")
+            return f"❌ Error interno: producto encontrado en catálogo pero no en tu inventario local."
+
+    except Exception as e:
+        print(f"💥 ERROR al actualizar inventario: {e}")
+        return f"❌ Error al actualizar stock: {str(e)}"
+
+    # Registro en tabla "ventas"
+    try:
+        venta_data = {
+            "user_id": user_id,
+            "total": precio_final * cantidad,
+            "metodo_pago": metodo_pago,
+            "detalles": [{"producto": nombre, "cantidad": cantidad, "precio": precio_final}],
+            "created_at": datetime.now().isoformat()
+        }
+        venta_result = supabase.table("ventas").insert(venta_data).execute()
+        print(f"✅ Venta guardada en BD | id={venta_result.data[0]['id'] if venta_result.data else 'sin id'}")
+    except Exception as e:
+        print(f"💥 ERROR al guardar venta: {e}")
+        return f"❌ Stock actualizado pero error al guardar la venta: {str(e)}"
+
+    return f"✅ Venta exitosa: {cantidad}x {nombre}. Total: ${precio_final * cantidad}. Stock restante: {nuevo_stock}."
 
 def tool_actualizar_precio(producto_nombre: str, nuevo_precio: int, user_id: str):
     pid, nombre, precio, stock = buscar_producto_id(producto_nombre, user_id)
@@ -407,6 +416,62 @@ def tool_inicializar_inventario(user_id: str):
     except Exception as e:
         return f"❌ Error al guardar en base de datos: {str(e)}"
 
+@router.get("/stats", status_code=status.HTTP_200_OK)
+def get_dashboard_stats(user = Depends(get_current_user)):
+    try:
+        hoy = date.today().isoformat()
+        print(f"📊 Cargando stats para user {user.id}, fecha: {hoy}")
+
+        # --- FIX: Verificamos que la tabla "ventas" existe antes de consultar ---
+        try:
+            ventas_hoy = supabase.table("ventas")\
+                .select("total, detalles")\
+                .eq("user_id", user.id)\
+                .gte("created_at", f"{hoy}T00:00:00")\
+                .execute()
+            print(f"✅ Ventas encontradas: {len(ventas_hoy.data) if ventas_hoy.data else 0}")
+        except Exception as db_err:
+            # Error específico de base de datos — lo mostramos claro en los logs
+            print(f"❌ ERROR AL CONSULTAR TABLA 'ventas': {db_err}")
+            print("👉 Verifica en Supabase que la tabla se llame exactamente 'ventas' (con s)")
+            # Devolvemos stats vacías para que el frontend no colapse
+            return {
+                "ventas_hoy": 0,
+                "productos_vendidos": 0,
+                "alertas_stock": 0,
+                "chart_labels": [],
+                "chart_data": [],
+                "error_detalle": f"Error de base de datos: {str(db_err)}"
+            }
+            
+        total_dinero = 0
+        total_productos = 0
+        prod_contador = {}
+        
+        if ventas_hoy.data:
+            for v in ventas_hoy.data:
+                total_dinero += v.get("total", 0)
+                for d in v.get("detalles", []):
+                    total_productos += d.get("cantidad", 0)
+                    nombre = d.get("producto", "Desconocido")
+                    prod_contador[nombre] = prod_contador.get(nombre, 0) + d.get("cantidad", 0)
+
+        top_5 = sorted(prod_contador.items(), key=lambda x: x[1], reverse=True)[:5]
+        
+        # Alertas de stock
+        alertas = supabase.table("inventario_local").select("id").eq("user_id", user.id).lt("stock_actual", 5).execute()
+        
+        return {
+            "ventas_hoy": total_dinero,
+            "productos_vendidos": total_productos,
+            "alertas_stock": len(alertas.data) if alertas.data else 0,
+            "chart_labels": [item[0] for item in top_5],
+            "chart_data": [item[1] for item in top_5]
+        }
+    except Exception as e:
+        print(f"❌ Error general en /stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # --- SCHEMA PARA OPENAI ---
 tools_schema = [
     {
@@ -442,17 +507,24 @@ tools_schema = [
         "type": "function",
         "function": {
             "name": "registrar_venta",
-            "description": "Registra una venta. Requiere nombre, cantidad, precio y método de pago.",
+            "description": (
+                "Registra una venta y descuenta el stock. "
+                "REGLA CRITICA: SIEMPRE ejecuta esta funcion antes de responder al usuario. "
+                "NUNCA redactes el mensaje de exito sin haber llamado a esta funcion primero — "
+                "el resultado que ella devuelva es lo que debes comunicar. "
+                "Si el metodo de pago no fue mencionado, pasa 'preguntar' y la funcion te "
+                "indicara que debes pedirlo; luego llamala de nuevo con todos los datos."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "producto_nombre": {"type": "string"},
                     "cantidad": {"type": "integer"},
-                    "precio_venta_real": {"type": "integer", "description": "Precio unitario real. 0 si no se menciona."},
+                    "precio_venta_real": {"type": "integer", "description": "Precio unitario real. 0 si no se menciona explicitamente."},
                     "metodo_pago": {
                         "type": "string",
                         "enum": ["efectivo", "tarjeta", "transferencia", "preguntar"],
-                        "description": "El medio de pago. Si el usuario NO lo menciona, DEBES seleccionar 'preguntar'."
+                        "description": "El medio de pago. Si el usuario NO lo menciono explicitamente, USA 'preguntar'. Nunca asumas ni inventes el metodo."
                     }
                 },
                 "required": ["producto_nombre", "cantidad", "precio_venta_real", "metodo_pago"]
@@ -532,6 +604,19 @@ tools_schema = [
     }
 ]
 
+# Palabras que indican intención de venta
+PALABRAS_VENTA = ["vend", "salió", "salieron", "despach", "cobr", "vendí", "vendido", "se llevaron", "vendimos"]
+# Palabras que indican llegada de stock
+PALABRAS_STOCK = ["llegaron", "llegó", "compré", "compramos", "recibí", "recibimos", "entró", "entraron", "cargué"]
+
+def detectar_herramienta_forzada(mensaje: str):
+    msg = mensaje.lower()
+    if any(p in msg for p in PALABRAS_VENTA):
+        return {"type": "function", "function": {"name": "registrar_venta"}}
+    if any(p in msg for p in PALABRAS_STOCK):
+        return {"type": "function", "function": {"name": "actualizar_stock"}}
+    return "auto"
+
 #MODELO
 class ChatRequest(BaseModel):
     message: str
@@ -549,28 +634,30 @@ def chat_with_tools(request: ChatRequest, user = Depends(confirmar_pago_activo))
         raw_prompt = load_system_prompt()
         system_instruction = raw_prompt.replace("{nombre_negocio}", nombre_negocio)
 
-        # 3. 🧠 MEMORIA: Recuperamos historial
-        # Ordenamos: System -> Historial Pasado -> Mensaje Actual
+        # 3. 🧠 MEMORIA
         history_messages = get_chat_history(current_user_id)
-        
         messages = [{"role": "system", "content": system_instruction}]
-        
-        # Inyectamos el historial recuperado de Supabase
         for msg in history_messages:
             messages.append({"role": msg["role"], "content": msg["content"]})
-        
-        # Agregamos lo que el usuario acaba de decir
         messages.append({"role": "user", "content": request.message})
 
-        # 4. Bucle del Agente
+        # 4. Detectar si debemos forzar una herramienta en la primera llamada
+        primera_tool_choice = detectar_herramienta_forzada(request.message)
+        print(f"🎯 tool_choice detectado: {primera_tool_choice}")
+
+        # 5. Bucle del Agente
         final_reply = ""
-        
-        for _ in range(5): 
+        es_primera_llamada = True
+
+        for _ in range(5):
+            tool_choice_actual = primera_tool_choice if es_primera_llamada else "auto"
+            es_primera_llamada = False
+
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
                 tools=tools_schema,
-                tool_choice="auto"
+                tool_choice=tool_choice_actual
             )
 
             response_message = response.choices[0].message

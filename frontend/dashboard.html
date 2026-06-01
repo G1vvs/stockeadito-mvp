@@ -35,7 +35,6 @@
             </div>
             
             <div class="chat-input-area">
-                
                 <button id="micButton" class="mic-btn" onclick="toggleRecording()" title="Hablar">
                     🎤
                 </button>
@@ -49,37 +48,104 @@
                         </svg>
                     </button>
                 </div>
-
             </div>
         </div>
 
-        <div class="data-panel">
-            <div class="data-header">
-                <h2>📦 Tu Inventario</h2>
+        <div class="data-panel" style="display: flex; flex-direction: column; overflow: hidden;">
+            
+            <div class="data-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 20px; flex-shrink: 0;">
+                <div class="tabs-container" style="display: flex; gap: 10px;">
+                    <button id="tab-inventory" class="btn btn-primary" onclick="switchView('inventory')" style="padding: 8px 16px;">📦 Tu Inventario</button>
+                    <button id="tab-metrics" class="btn btn-secondary" onclick="switchView('metrics')" style="padding: 8px 16px;">📊 Resumen de Ventas</button>
+                </div>
                 <div id="statusContainer"></div>
             </div>
 
-            <div class="table-container">
-                <table id="inventoryTable">
-                    <thead>
-                        <tr>
-                            <th>Producto</th>
-                            <th style="width: 80px; text-align: center;">Stock</th>
-                            <th style="width: 100px; text-align: right;">Precio</th>
-                            <th style="width: 100px; text-align: center;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                        <tr>
-                            <td colspan="4" style="text-align: center; color: gray;">Cargando datos...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+            <div id="view-inventory" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-height: 0;">
+                
+                <div class="inventory-controls" style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; flex-shrink: 0;">
+                    <label for="categoryFilter" style="font-weight: 600; color: #444;">Filtrar por Categoría:</label>
+                    <select id="categoryFilter" style="padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; background-color: #fff; font-size: 0.9rem; min-width: 200px; cursor: pointer;">
+                        <option value="all">📦 Todas las categorías</option>
+                    </select>
+                </div>
 
+                <div class="table-container" style="flex: 1;">
+                    <table id="inventoryTable" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th style="width: 80px; text-align: center;">Stock</th>
+                                <th style="width: 100px; text-align: right;">Precio</th>
+                                <th style="width: 100px; text-align: center;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: gray;">Cargando datos...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="view-metrics" style="display: none; flex: 1; overflow-y: auto; padding-right: 10px;">
+                
+                <div class="stats-grid" style="display: flex; gap: 20px; margin-bottom: 30px;">
+                    <div class="stat-card" style="padding: 20px; background: #f8f9fa; border-radius: 10px; flex: 1; text-align: center; border: 1px solid #e1e4e8; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                        <h3 style="margin-top: 0; color: #555; font-size: 1.1rem;">Ventas del Día</h3>
+                        <p id="ventas-hoy" style="font-size: 28px; font-weight: bold; color: #2ecc71; margin: 10px 0 0 0;">$0</p>
+                    </div>
+                    <div class="stat-card" style="padding: 20px; background: #f8f9fa; border-radius: 10px; flex: 1; text-align: center; border: 1px solid #e1e4e8; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                        <h3 style="margin-top: 0; color: #555; font-size: 1.1rem;">Productos Vendidos</h3>
+                        <p id="cantidad-vendida" style="font-size: 28px; font-weight: bold; color: #3498db; margin: 10px 0 0 0;">0</p>
+                    </div>
+                    <div class="stat-card" style="padding: 20px; background: #fff8e1; border-radius: 10px; flex: 1; text-align: center; border: 1px solid #ffecb3; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                        <h3 style="margin-top: 0; color: #d35400; font-size: 1.1rem;">Alertas Stock Crítico</h3>
+                        <p id="alertas-stock" style="font-size: 28px; font-weight: bold; color: #e67e22; margin: 10px 0 0 0;">0</p>
+                    </div>
+                </div>
+
+                <div class="chart-container" style="background: white; padding: 20px; border-radius: 10px; border: 1px solid #e1e4e8; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                    <h3 style="margin-top: 0; color: #333; text-align: center; margin-bottom: 20px;">Top Productos Más Vendidos</h3>
+                    <canvas id="topProductosChart" style="max-height: 320px; width: 100%;"></canvas>
+                </div>
+                
+            </div>
+            
+        </div>
+        
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/assets/js/app.js"></script>
+
+    <script>
+        function switchView(viewName) {
+            const viewInventory = document.getElementById('view-inventory');
+            const viewMetrics = document.getElementById('view-metrics');
+            const tabInventory = document.getElementById('tab-inventory');
+            const tabMetrics = document.getElementById('tab-metrics');
+
+            if (viewName === 'inventory') {
+                viewInventory.style.display = 'flex';
+                viewMetrics.style.display = 'none';
+                
+                tabInventory.className = 'btn btn-primary';
+                tabMetrics.className = 'btn btn-secondary';
+            } else {
+                viewInventory.style.display = 'none';
+                viewMetrics.style.display = 'block';
+                
+                tabInventory.className = 'btn btn-secondary';
+                tabMetrics.className = 'btn btn-primary';
+
+                // ✅ FIX: Recargamos métricas DESPUÉS de que el canvas sea visible.
+                // Chart.js necesita que el elemento esté en pantalla para calcular
+                // sus dimensiones. Si se llama con display:none, el gráfico queda ciego.
+                loadMetrics();
+            }
+        }
+    </script>
 </body>
 </html>

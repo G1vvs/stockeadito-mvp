@@ -13,9 +13,12 @@ class UserRegister(BaseModel):
 @router.post("/auth/register")
 def register_user(user: UserRegister):
     try:
-        #crear usuario en supabase auth
+        # 👇 Limpiamos el correo de espacios accidentales al inicio o al final 👇
+        email_limpio = user.email.strip()
+
+        # crear usuario en supabase auth
         response = supabase.auth.sign_up({
-            "email": user.email,
+            "email": email_limpio,  # Usamos la variable limpia aquí
             "password": user.password,
             "options": {
                 "data": {
@@ -23,6 +26,7 @@ def register_user(user: UserRegister):
                 }
             }
         })
+        
         # validacion 
         if not response.user:
             # si necesita confirmar el email, el usuario se crea pero no se loguea
@@ -35,9 +39,14 @@ def register_user(user: UserRegister):
             "negocio": user.nombre_negocio
         }
     except Exception as e:
-        print(f"Error: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=str(e))
+        # 1. Imprimimos el error con un emoji para verlo facilísimo en la terminal
+        print(f"🕵️‍♂️ ERROR REAL DE SUPABASE: {str(e)}")
+        
+        # 2. Lo mandamos como error 400 (Bad Request) porque es un error de validación, no del servidor
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 class UserLogin(BaseModel):
     email: str
