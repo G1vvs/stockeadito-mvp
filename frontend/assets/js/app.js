@@ -1,4 +1,6 @@
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:8000' 
+    : 'https://stockeadito-mvp.onrender.com';
 const token = localStorage.getItem('token');
 const user = JSON.parse(localStorage.getItem('user') || '{}');
 
