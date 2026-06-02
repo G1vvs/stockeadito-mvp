@@ -3,5 +3,6 @@
     { "source": "/dashboard", "destination": "/dashboard.html" },
     { "source": "/pagos", "destination": "/pagos.html" },
     { "source": "/", "destination": "/index.html" }
-  ]
+  ],
+  "outputDirectory": "frontend"
 }
