@@ -1,7 +1,8 @@
 // assets/js/auth.js
 
-// URL del Backend (Cámbiala cuando subas a producción)
-const BACKEND_URL = 'http://localhost:8000'; 
+const BACKEND_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:8000'
+    : 'https://stockeadito-mvp.onrender.com';
 
 // ==========================================
 // LÓGICA DE MODALES
@@ -37,11 +38,8 @@ function switchToSignup() {
     document.getElementById('loginForm').style.display = 'none';
 }
 
-// Cerrar modal al hacer click fuera
 document.getElementById('authModal').addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeModal();
-    }
+    if (e.target === this) closeModal();
 });
 
 function scrollToSection(id) {
@@ -61,33 +59,22 @@ async function handleLogin(e) {
     try {
         const response = await fetch(`${BACKEND_URL}/auth/login`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
         });
 
         const data = await response.json();
 
         if (response.ok) {
-            // 1. Obtenemos el token
             const token = data.access_token;
-            
             if (token) {
-                localStorage.setItem('token', token); 
-
-                // 2. CORRECCIÓN IMPORTANTE:
-                // Tu backend no devuelve "data.user", devuelve "data.user_id".
-                // Construimos el objeto nosotros mismos para que app.js no falle.
-                const usuarioParaGuardar = {
-                    email: email,      // Usamos el email que escribió en el formulario
-                    id: data.user_id   // Usamos el ID que nos dio el backend
-                };
-
-                localStorage.setItem('user', JSON.stringify(usuarioParaGuardar));
-                
-                // 3. Redirigimos
-                window.location.href = '/dashboard';
+                localStorage.setItem('token', token);
+                localStorage.setItem('user', JSON.stringify({
+                    email: email,
+                    id: data.user_id
+                }));
+                // ✅ FIX: extensión explícita para Vercel
+                window.location.href = '/dashboard.html';
             }
         } else {
             alert('Error: ' + (data.message || 'Credenciales incorrectas'));
@@ -108,14 +95,8 @@ async function handleSignup(e) {
     try {
         const response = await fetch(`${BACKEND_URL}/auth/register`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-                email, 
-                password,
-                nombre_negocio: negocio 
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, nombre_negocio: negocio })
         });
 
         const data = await response.json();
