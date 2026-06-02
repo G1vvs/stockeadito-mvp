@@ -1,8 +1,9 @@
 {
-  "rewrites": [
-    { "source": "/dashboard", "destination": "/dashboard.html" },
-    { "source": "/pagos", "destination": "/pagos.html" },
-    { "source": "/", "destination": "/index.html" }
-  ],
-  "outputDirectory": "frontend"
+  "outputDirectory": "frontend",
+  "routes": [
+    { "src": "/dashboard", "dest": "/dashboard.html" },
+    { "src": "/pagos", "dest": "/pagos.html" },
+    { "src": "/assets/(.*)", "dest": "/assets/$1" },
+    { "src": "/", "dest": "/index.html" }
+  ]
 }
