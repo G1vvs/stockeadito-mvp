@@ -151,3 +151,19 @@ MIT
 
 Desarrollado para la optimización de procesos de inventario local, democratizando el acceso a la tecnología. 🚀
 <img width="1899" height="916" alt="Screenshot 2026-06-01 205136" src="https://github.com/user-attachments/assets/dd793b3e-ab1e-41ce-a4f2-fc4e110187ec" />
+<img width="1916" height="920" alt="Screenshot 2026-06-01 205506" src="https://github.com/user-attachments/assets/74dadb66-9e5d-4d02-b527-6e66f71af28c" />
+<img width="1916" height="915" alt="Screenshot 2026-06-01 205429" src="https://github.com/user-attachments/assets/62664dc4-a3ce-415d-86bd-5cc5f70f2222" />
+<img width="502" height="384" alt="Screenshot 2026-06-01 205359" src="https://github.com/user-attachments/assets/84a5e5e6-5ab2-4eb5-9073-76da81c59ee0" />
+<img width="1916" height="919" alt="Screenshot 2026-06-01 205351" src="https://github.com/user-attachments/assets/2800dacd-23db-4922-9257-98a8446787cd" />
+<img width="1848" height="668" alt="Screenshot 2026-06-01 205339" src="https://github.com/user-attachments/assets/7c8aa620-d725-448c-93d1-edbf743a0466" />
+<img width="1905" height="919" alt="Screenshot 2026-06-01 205245" src="https://github.com/user-attachments/assets/67ce0ed7-914d-4f22-9981-ac69977ece50" />
+<img width="1906" height="913" alt="Screenshot 2026-06-01 205240" src="https://github.com/user-attachments/assets/2da9d706-0db2-4050-9139-55d4662e2c2a" />
+<img width="1905" height="914" alt="Screenshot 2026-06-01 205224" src="https://github.com/user-attachments/assets/d2efd873-2194-4f45-a77c-4d617334fdd0" />
+<img width="1899" height="916" alt="Screenshot 2026-06-01 205218" src="https://github.com/user-attachments/assets/915b69e8-16b3-457c-a409-caf4efdb9d52" />
+<img width="1905" height="915" alt="Screenshot 2026-06-01 205147" src="https://github.com/user-attachments/assets/0620009e-0c15-4a44-9b3f-59f73267c9d6" />
+<img width="1911" height="906" alt="Screenshot 2026-06-01 204753" src="https://github.com/user-attachments/assets/4e8b2c85-0aef-4b89-90a9-eece6b829585" />
+<img width="1899" height="913" alt="Screenshot 2026-06-01 204736" src="https://github.com/user-attachments/assets/69f4c66d-f7e5-4b92-a84d-685ba4458fb1" />
+<img width="1885" height="897" alt="Screenshot 2026-06-01 204717" src="https://github.com/user-attachments/assets/da0ce45c-ac03-4c4a-9794-dc6a8d73d0ee" />
+<img width="1915" height="911" alt="Screenshot 2026-06-01 205639" src="https://github.com/user-attachments/assets/aa4596d9-df11-4a7c-aa1e-c8391f6d69dc" />
+<img width="1913" height="917" alt="Screenshot 2026-06-01 205633" src="https://github.com/user-attachments/assets/29c2a294-5f91-42d2-a887-d4f7e937432e" />
+<img width="1919" height="911" alt="Screenshot 2026-06-01 205523" src="https://github.com/user-attachments/assets/f4b18d82-64f6-4e5e-a635-ce56060b3f46" />
