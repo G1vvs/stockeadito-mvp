@@ -150,3 +150,4 @@ MIT
 ---
 
 Desarrollado para la optimización de procesos de inventario local, democratizando el acceso a la tecnología. 🚀
+<img width="1899" height="916" alt="Screenshot 2026-06-01 205136" src="https://github.com/user-attachments/assets/dd793b3e-ab1e-41ce-a4f2-fc4e110187ec" />
