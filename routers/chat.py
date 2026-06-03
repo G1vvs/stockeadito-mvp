@@ -604,19 +604,19 @@ tools_schema = [
     }
 ]
 
+# Palabras que indican intención de venta
 PALABRAS_VENTA = ["vend", "salió", "salieron", "despach", "cobr", "vendí", "vendido", "se llevaron", "vendimos"]
+# Palabras que indican llegada de stock
 PALABRAS_STOCK = ["llegaron", "llegó", "compré", "compramos", "recibí", "recibimos", "entró", "entraron", "cargué"]
-PALABRAS_EXCLUSION = ["robaron", "robó", "caducar", "caducaron", "vencieron", "vencido", "dañaron", "perdieron", "rompieron", "quebraron"]
 
 def detectar_herramienta_forzada(mensaje: str):
     msg = mensaje.lower()
-    if any(p in msg for p in PALABRAS_EXCLUSION):
-        return "auto"
     if any(p in msg for p in PALABRAS_VENTA):
         return {"type": "function", "function": {"name": "registrar_venta"}}
     if any(p in msg for p in PALABRAS_STOCK):
         return {"type": "function", "function": {"name": "actualizar_stock"}}
     return "auto"
+
 #MODELO
 class ChatRequest(BaseModel):
     message: str
