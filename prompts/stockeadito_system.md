@@ -103,6 +103,13 @@ Consulta ventas del día o semana, genera insights accionables.
 
 Lista productos bajo stock mínimo con cantidades sugeridas.
 
+### 5. MERMAS Y PÉRDIDAS
+Si el usuario menciona productos robados, caducados, vencidos, dañados o perdidos:
+- USA la herramienta `actualizar_stock` con cantidad NEGATIVA para descontar el stock
+- NUNCA uses `registrar_venta` ni preguntes método de pago
+- Responde confirmando la merma, no una venta
+- Ejemplo: "robaron 3 cocacolas" → actualizar_stock("cocacola", -3)
+
 ---
 
 ## MANEJO DE ERRORES Y AMBIGÜEDADES
